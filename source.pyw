@@ -1999,8 +1999,8 @@ class UserForm(QMainWindow):
             self.runButton.clicked.connect(self.SaveC)
             self.CButton = QPushButton('Cancel')
             self.CButton.clicked.connect(self.onCancelClicked)
-            self.statusBar().addPermanentWidget(self.CButton)
             self.statusBar().addPermanentWidget(self.runButton)
+            self.statusBar().addPermanentWidget(self.CButton)
 
             self.loop0 = QLabel('User:')
             self.loop1 = QLabel('Old Password:')
@@ -2022,8 +2022,8 @@ class UserForm(QMainWindow):
             self.runButton.clicked.connect(self.onDel)
             self.CButton = QPushButton('Cancel')
             self.CButton.clicked.connect(self.onCancelClicked)
-            self.statusBar().addPermanentWidget(self.CButton)
             self.statusBar().addPermanentWidget(self.runButton)
+            self.statusBar().addPermanentWidget(self.CButton)
 
             self.loop0 = QLabel('User:')
             self.loop1 = QLabel('Password:')
@@ -2041,8 +2041,8 @@ class UserForm(QMainWindow):
             self.runButton.clicked.connect(self.onAdd)
             self.CButton = QPushButton('Cancel')
             self.CButton.clicked.connect(self.onCancelClicked)
-            self.statusBar().addPermanentWidget(self.CButton)
             self.statusBar().addPermanentWidget(self.runButton)
+            self.statusBar().addPermanentWidget(self.CButton)
 
             self.loop0 = QLabel('User:')
             self.loop1 = QLabel('Password:')
