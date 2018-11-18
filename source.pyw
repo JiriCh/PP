@@ -19,13 +19,11 @@ from operator import itemgetter
 from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
 from matplotlib.figure import Figure
-from pandas import DataFrame, concat
+from pandas import DataFrame, concat, merge
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta, date
 from email.utils import COMMASPACE, formatdate
 from dateutil.relativedelta import relativedelta
-
-#Version_1.00.00
 
 # Set fixed commission rate here:
 FixedCommission = 0.1
@@ -159,7 +157,12 @@ sql_dict = {
     'All_sellers' : {'sql' : 'SELECT Sellers.Seller, Sellers.EM_address from Sellers where Sellers.EM_address is not Null', 'args' : None},
     'InsertRentPayers' : {'sql' : 'INSERT into Rent_payers VALUES(?,?,?,?,?,?)', 'args' : None},
     'InsertSellers' : {'sql' : 'INSERT into Sellers VALUES(?,?,?,?,?,?,?,?,?,?,?,?)', 'args' : None},
-    'ValidateSeller' : {'sql' : 'SELECT distinct Seller from Sellers', 'args' : None}
+    'ValidateSeller' : {'sql' : 'SELECT distinct Seller from Sellers', 'args' : None},
+    'DisplayModPayers' : {'sql' : 'SELECT * from Rent_payers', 'args' : None},
+    'ChangeModPayers' : {'sql' : 'INSERT into Rent_payers VALUES(?,?,?,?,?,?)', 'args' : None},
+    'DeleteModPayers' : {'sql' : 'DELETE from Rent_payers where Seller is not ?', 'args' : None},
+    'DistinctPayers' : {'sql' : 'SELECT distinct Seller from Rent_payers', 'args' : None},
+    'InsertNewPayer' : {'sql' : 'INSERT into Rent_payers VALUES(?,?,?,?,?,?)', 'args' : None}
             }
 
 class myCombo(QComboBox):
@@ -315,6 +318,8 @@ class appMW(QMainWindow):
 
         Tools = mainMenu.addMenu('Tools')
         Tools.addAction('Add New Seller').triggered.connect(lambda arg, glVar = None: self.on_display(Form(glVar)))
+        Tools.addAction('Add New Rent Payer').triggered.connect(lambda arg, glVar = 'AddModPayer': self.on_display(Form(glVar)))
+        Tools.addAction('Update Rent Payers').triggered.connect(lambda arg, sql = 'DisplayModPayers': self.on_display(TBWindow(sql)))
         Tools.addAction('Backup the DB').triggered.connect(lambda arg, bType = 'Regular': self.on_BackUp(bType))
         Tools.addAction('Backup the DB Online').triggered.connect(lambda arg, bType = 'On-line': self.on_BackUp(bType))
         
@@ -365,7 +370,7 @@ class appMW(QMainWindow):
                 msgbox = QMessageBox(QMessageBox.Information, 'Dialog', 'This user does not have authorization for that action.', QMessageBox.Ok)
                 msgbox.exec()
         else:
-            if arg.sql in ('ThisMonthCosts', 'ThisWeekCosts', 'LastCost', 'AllCosts', 'LastMonthCosts', 'SaveCosts', 'DisplayModStock', 'DisplayZero') and uNm not in ('Admin', 'Jana'):
+            if arg.sql in ('ThisMonthCosts', 'ThisWeekCosts', 'LastCost', 'AllCosts', 'LastMonthCosts', 'SaveCosts', 'DisplayModStock', 'DisplayModPayers', 'DisplayZero') and uNm not in ('Admin', 'Jana'):
                 msgbox = QMessageBox(QMessageBox.Information, 'Dialog', 'This user does not have authorization for that action.', QMessageBox.Ok)
                 msgbox.exec()
             else:
@@ -948,6 +953,7 @@ class TBWindow(QMainWindow):
 
         if isinstance(self.sql, str):
             sql_query(sql_dict[sql]['sql'], sql_dict[sql]['args'])
+            self.originalData = sql_obj
             data = DataFrame(sql_obj, columns = headers)
         else:
             self.sql = None
@@ -959,18 +965,19 @@ class TBWindow(QMainWindow):
         self.view           = QTableView(self.centralwidget)
         self.comboBox       = QComboBox(self.centralwidget)
         self.label          = QLabel(self.centralwidget)
-
+        
         self.gridLayout = QGridLayout(self.centralwidget)
-        self.gridLayout.addWidget(self.lineEdit, 0, 1, 1, 1)
-        self.gridLayout.addWidget(self.view, 1, 0, 1, 3)
+
+        self.label.setText("Filter")
         self.gridLayout.addWidget(self.comboBox, 0, 2, 1, 1)
         self.gridLayout.addWidget(self.label, 0, 0, 1, 1)
+        self.gridLayout.addWidget(self.lineEdit, 0, 1, 1, 1)
 
+        self.gridLayout.addWidget(self.view, 1, 0, 1, 3)
         self.setCentralWidget(self.centralwidget)
-        self.label.setText("Filter")
 
-        if self.sql in ('DisplayModStock', 'DisplayZero'):
-            if len(data.index) == 0:
+        if self.sql in ('DisplayModStock', 'DisplayZero', 'DisplayModPayers'):
+            if len(data.index) == 0:#create empty table for new products
                 emptyList = []
                 for i in range(20):
                     emptyList.append(' ')
@@ -1038,6 +1045,11 @@ class TBWindow(QMainWindow):
         self.comboBox.addItems(list(data.columns.values))
         self.lineEdit.textChanged.connect(self.on_lineEdit_textChanged)
         self.comboBox.currentIndexChanged.connect(self.on_comboBox_currentIndexChanged)
+        
+        if self.sql in ('DisplayModPayers', 'DisplayZero'):
+            self.comboBox.hide()
+            self.label.hide()
+            self.lineEdit.hide()
 
         if self.sql is None:
             lastRow = data.append(data.sum(numeric_only=True), ignore_index=True).tail(1).fillna(0).astype(int).replace(0,'').values
@@ -1069,36 +1081,46 @@ class TBWindow(QMainWindow):
                     rowRes.append(item)
                 data.append(rowRes)
             cleanData = []
-            
-            for row in data:
-                if any([x for x in row if (x not in ' ' and x not in '')]):
-                    cleanData.append(row)
-
-            if len(cleanData) == 0 or any([(cleanData.index(x),x.index(y)) for x in cleanData for y in x if (y == ' ' or y == '')]):
-                msgbox = QMessageBox(QMessageBox.Information, 'Dialog', 'The template is incomplete, please check it.', QMessageBox.Ok)
-                msgbox.exec()
+            #this needs to be finished: elif self.sql == ...
+            if self.sql == 'DisplayModPayers':
+                sql_query(sql_dict['DeleteModPayers']['sql'], (None,))
+                for row in data:
+                    if row[4] == 'None':
+                        row[4] = None
+                    if row[5] == 'None':
+                        row[5] = None
+                    sql_query(sql_dict['ChangeModPayers']['sql'], row)
+                self.close()
             else:
-                dataFrame = DataFrame(cleanData)
-                dataFrame[6] = uNm
-                                
-                if all(dataFrame[4].str.isnumeric()) and all(dataFrame[5].str.isnumeric()):
-                    sql_query(sql_dict['Dups_check']['sql'], sql_dict['Dups_check']['args'])
-                    df_check = DataFrame(sql_obj)
-                    
-                    if any(dataFrame[1].isin(df_check[3])):
-                        dataFrame = dataFrame.values.tolist()
-                        for element in dataFrame:
-                            element.append(element[1])
-                            sql_query(sql_dict['UpdateProd']['sql'], (element))
-                        self.close()
-                    else:
-                        dataFrame = dataFrame.values.tolist()
-                        for element in dataFrame:
-                            sql_query(sql_dict['RegUpProd']['sql'], (element))
-                        self.close()
+                for row in data:
+                    if any([x for x in row if (x not in ' ' and x not in '')]):
+                        cleanData.append(row)
+
+                if len(cleanData) == 0 or any([(cleanData.index(x),x.index(y)) for x in cleanData for y in x if (y == ' ' or y == '')]):
+                    msgbox = QMessageBox(QMessageBox.Information, 'Dialog', 'The template is incomplete, please check it.', QMessageBox.Ok)
+                    msgbox.exec()
                 else:
-                    msgbox = QMessageBox(QMessageBox.Information, 'Dialog', 'At least one input in Unit_price and/or Stock field is not of a numeric format.' , QMessageBox.Ok)
-                    res = msgbox.exec()
+                    dataFrame = DataFrame(cleanData)
+                    dataFrame[6] = uNm
+                                    
+                    if all(dataFrame[4].str.isnumeric()) and all(dataFrame[5].str.isnumeric()):
+                        sql_query(sql_dict['Dups_check']['sql'], sql_dict['Dups_check']['args'])
+                        df_check = DataFrame(sql_obj)
+                        
+                        if any(dataFrame[1].isin(df_check[3])):
+                            dataFrame = dataFrame.values.tolist()
+                            for element in dataFrame:
+                                element.append(element[1])
+                                sql_query(sql_dict['UpdateProd']['sql'], (element))
+                            self.close()
+                        else:
+                            dataFrame = dataFrame.values.tolist()
+                            for element in dataFrame:
+                                sql_query(sql_dict['RegUpProd']['sql'], (element))
+                            self.close()
+                    else:
+                        msgbox = QMessageBox(QMessageBox.Information, 'Dialog', 'At least one input in Unit_price and/or Stock field is not of a numeric format.' , QMessageBox.Ok)
+                        res = msgbox.exec()
 
     def on_Cancel(self):
         msgbox = QMessageBox(QMessageBox.Information, 'Dialog', 'Do you really want to close this window?' , QMessageBox.Yes|QMessageBox.No)
@@ -1801,18 +1823,23 @@ class SRreport(QWidget):
 class Form(QMainWindow):
     def __init__(self, glVar):
         QMainWindow.__init__(self)
+        self.glVar = glVar
         self.initUI()
 
     def initUI(self):
 
         self.setWindowTitle(' ')
         self.runButton = QPushButton('Save')
-        self.runButton.clicked.connect(self.cInfo)
         self.CButton = QPushButton('Cancel')
         self.CButton.clicked.connect(self.onCancelClicked)
         self.toolBar = self.addToolBar('oneAct')
         self.toolBar.addWidget(self.runButton)
         self.toolBar.addWidget(self.CButton)
+
+        if self.glVar == None:
+            self.runButton.clicked.connect(self.cInfo)
+        elif self.glVar == 'AddModPayer':
+            self.runButton.clicked.connect(self.AddcInfo)
 
         self.createFormGroupBox()
 
@@ -1862,6 +1889,11 @@ class Form(QMainWindow):
         self.loop15 = QLabel('Comment:')
         self.loop16 = QLabel('Contract since:*')
         
+        sql_query(sql_dict['DistinctPayers']['sql'], None)
+        sellers = [''] + [x[0] for x in sql_obj]
+
+        self.newLine = QComboBox()
+        self.newLine.addItems(sellers)
         self.Line0 = QLineEdit()
         self.Line1 = QLineEdit()
         self.Line2 = QLineEdit()
@@ -1909,28 +1941,69 @@ class Form(QMainWindow):
         self.formGroupBox = QGroupBox('Seller details')
         layout = QFormLayout()
         
-        layout.addRow(self.loop0, self.Line0)
-        layout.addRow(self.loop1, self.Line1)
-        layout.addRow(self.loop2, self.Line2)
-        layout.addRow(self.loop3, self.Line3)
-        layout.addRow(self.loop4, self.Line4)
-        layout.addRow(self.loop5, self.Line5)
-        layout.addRow(self.loop6, self.Line6)
-        layout.addRow(self.loop7, self.Line7)
-        layout.addRow(self.loop8, self.Line8)
-        layout.addRow(self.loop9, self.Line9)
-        layout.addRow(self.loop10, self.Line10)
-        layout.addRow(self.loop11, self.Line11)
-        layout.addRow(self.loop12, self.Line12)
-        layout.addRow(self.loop13, self.Line13)
-        layout.addRow(self.loop14, self.Line14)
-        layout.addRow(self.loop15, self.Line15)
-        layout.addRow(self.loop16, self.Line16)
+        if self.glVar == None:
+            layout.addRow(self.loop0, self.Line0)
+            layout.addRow(self.loop1, self.Line1)
+            layout.addRow(self.loop2, self.Line2)
+            layout.addRow(self.loop3, self.Line3)
+            layout.addRow(self.loop4, self.Line4)
+            layout.addRow(self.loop5, self.Line5)
+            layout.addRow(self.loop6, self.Line6)
+            layout.addRow(self.loop7, self.Line7)
+            layout.addRow(self.loop8, self.Line8)
+            layout.addRow(self.loop9, self.Line9)
+            layout.addRow(self.loop10, self.Line10)
+            layout.addRow(self.loop11, self.Line11)
+            layout.addRow(self.loop12, self.Line12)
+            layout.addRow(self.loop13, self.Line13)
+            layout.addRow(self.loop14, self.Line14)
+            layout.addRow(self.loop15, self.Line15)
+            layout.addRow(self.loop16, self.Line16)
+        elif self.glVar == 'AddModPayer':
+            layout.addRow(self.loop0, self.newLine)
+            layout.addRow(self.loop12, self.Line12)
+            layout.addRow(self.loop13, self.Line13)
+            layout.addRow(self.loop14, self.Line14)
+            layout.addRow(self.loop15, self.Line15)
+            layout.addRow(self.loop16, self.Line16)
         
         self.formGroupBox.setLayout(layout)
 
     def onCancelClicked(self):
         self.close()
+
+    def AddcInfo(self):
+        try:
+            emptyL = []
+            for item in (self.newLine, self.Line12, self.Line13, self.Line14, self.Line15):
+                if item == self.Line13:
+                    if item.text() == '':
+                        element = None
+                    else:
+                        element = item.text()
+                    emptyL.append(element)
+                elif item in (self.newLine, self.Line12, self.Line14, self.Line15):
+                    if str(item.currentText()) == '' or str(item.currentText()) == ' ':
+                        element = None
+                    else:
+                        element = str(item.currentText())
+                    emptyL.append(element)
+            emptyL.append(str(self.yearEdit.text()) + dict((v,k) for k,v in (month_dict.items())).get(' ' + str(self.monthEdit.currentText())) + str(self.dayEdit.text()))
+            emptyL[1] = self.rentItemsDict.get(emptyL[1])
+            if None in (emptyL[0], emptyL[1], emptyL[2], emptyL[3], emptyL[5]):
+                    msgbox = QMessageBox(QMessageBox.Information, 'Dialog', 'You need to complete the form before proceeding.', QMessageBox.Ok)
+                    msgbox.exec()
+            else:
+                sql_query(sql_dict['DisplayModPayers']['sql'], None)
+                res = [(row[0],row[1]) for row in sql_obj]
+                if (emptyL[0],emptyL[1]) in res:
+                    msgbox = QMessageBox(QMessageBox.Information, 'Dialog', 'This combination of rent payer and rent type already exists within the DataBase.', QMessageBox.Ok)
+                    msgbox.exec()
+                else:
+                    sql_query(sql_dict['InsertNewPayer']['sql'], emptyL)
+                    self.close()
+        except Exception as e:
+            print(e)
 
     def cInfo(self):
         try:
