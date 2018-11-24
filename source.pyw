@@ -19,7 +19,7 @@ from operator import itemgetter
 from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
 from matplotlib.figure import Figure
-from pandas import DataFrame, concat, merge
+from pandas import DataFrame, concat, merge, read_excel, read_csv
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta, date
 from email.utils import COMMASPACE, formatdate
@@ -162,7 +162,9 @@ sql_dict = {
     'ChangeModPayers' : {'sql' : 'INSERT into Rent_payers VALUES(?,?,?,?,?,?)', 'args' : None},
     'DeleteModPayers' : {'sql' : 'DELETE from Rent_payers where Seller is not ?', 'args' : None},
     'DistinctPayers' : {'sql' : 'SELECT distinct Seller from Rent_payers', 'args' : None},
-    'InsertNewPayer' : {'sql' : 'INSERT into Rent_payers VALUES(?,?,?,?,?,?)', 'args' : None}
+    'InsertNewPayer' : {'sql' : 'INSERT into Rent_payers VALUES(?,?,?,?,?,?)', 'args' : None},
+    'DisplayRes' : {'sql' : 'SELECT * from Stock where Product_id not in ("post01") LIMIT 5', 'args' : None},
+    'CheckStock' : {'sql' : 'SELECT * from Stock where Product_id  in (%s)', 'args' : None}
             }
 
 class myCombo(QComboBox):
@@ -303,13 +305,14 @@ class appMW(QMainWindow):
         Warehouse.addAction('Display Actual Stock').triggered.connect(lambda arg, sql = 'DisplayActStock': self.on_display(TBWindow(sql)))
         Warehouse.addAction('Modify Stock/Product').triggered.connect(lambda arg, sql = 'DisplayModStock': self.on_display(TBWindow(sql)))
         Warehouse.addAction('Add Product(s)').triggered.connect(lambda arg, sql = 'DisplayZero': self.on_display(TBWindow(sql)))
+        Warehouse.addAction('Import Product(s)').triggered.connect(lambda arg , var = 'importProds': self.TCWarning(var))
 
         Analyses = mainMenu.addMenu('Overview')
         Analyses.addAction('Dynamic Overview of Sales').triggered.connect(lambda arg, glVar = None: self.on_display(Example(glVar)))
         Analyses.addAction('Dynamic Overview of Rents').triggered.connect(lambda arg, glVar = 'Rent': self.on_display(Example(glVar)))
 
         Reports = mainMenu.addMenu('Reports')
-        Reports.addAction('Monthly Sales/Rents').triggered.connect(self.TCWarning)
+        Reports.addAction('Monthly Sales/Rents').triggered.connect(lambda arg , var = 'SReport': self.TCWarning(var))
 
 ##        Analyses.addAction('Total Sales/Label').triggered.connect(self.on_ViewAll)
 ##        Analyses.addAction('Sales Customized Overview').triggered.connect(self.on_selfAdj)
@@ -337,13 +340,15 @@ class appMW(QMainWindow):
         palette.setBrush(10, QBrush(sImage))
         self.setPalette(palette)
 
-    def TCWarning(self):
-        if uNm in ('Admin', 'Jana'):
+    def TCWarning(self, var):
+        if uNm in ('Admin', 'Jana') and var == 'SReport':
             msgbox = QMessageBox(QMessageBox.Information, 'Dialog', 'This action might take few minutes, do you wish to proceed?' , QMessageBox.Yes|QMessageBox.No)
             res = msgbox.exec()
             if res == QMessageBox.Yes:
                 self.view = SRreport()
                 self.view.show()
+        elif uNm in ('Admin', 'Jana') and var == 'importProds':
+            self.importProds()
         else:
             msgbox = QMessageBox(QMessageBox.Information, 'Dialog', 'This user does not have authorization for that action.', QMessageBox.Ok)
             msgbox.exec()
@@ -435,6 +440,38 @@ class appMW(QMainWindow):
             except:      
                 msgbox = QMessageBox(QMessageBox.Information, 'Dialog', 'An error occurred, the DataBase has not been backed-up.', QMessageBox.Ok)
                 msgbox.exec()
+
+    def importProds(self):
+        fname, fEnd = QFileDialog.getOpenFileName(self, "Save File", desktop, "Data Files(*.xls; *.xlsx; *.csv)")
+        if fname:
+            if 'xlsx' in fname or 'xls' in fname:
+                try:
+                    res = read_excel(fname)
+                    res.columns = 'Category', 'Product_id', 'Product_desc', 'Label', 'Unit_price', 'Stock', 'Added_by', 'Usage_flag'
+                    sql = res.values.astype(str).tolist()
+                    if all(True if len(x) == 8 and 'nan' not in x else False for x in sql):
+                        self.w = TBWindow(sql)
+                        self.w.showMaximized()
+                    else:
+                        msgbox = QMessageBox(QMessageBox.Information, 'Dialog', 'The data you would like to insert into the Database has incorrect dimension, it needs to have 8 columns.', QMessageBox.Ok)
+                        msgbox.exec()
+                except Exception as e:
+                    msgbox = QMessageBox(QMessageBox.Information, 'Dialog', 'An unexpected error occurred, this action cannot be completed. The error details are: %s.' %e, QMessageBox.Ok)
+                    msgbox.exec()
+            elif 'csv' in fname:
+                try:
+                    res = read_csv(fname)
+                    res.columns = 'Category', 'Product_id', 'Product_desc', 'Label', 'Unit_price', 'Stock', 'Added_by', 'Usage_flag'
+                    sql = res.values.astype(str).tolist()
+                    if all(True if len(x) == 8 and 'nan' not in x else False for x in sql):
+                        self.w = TBWindow(sql)
+                        self.w.showMaximized()
+                    else:
+                        msgbox = QMessageBox(QMessageBox.Information, 'Dialog', 'The data you would like to insert into the Database has incorrect dimension, it needs to have 8 columns.', QMessageBox.Ok)
+                        msgbox.exec()
+                except Exception as e:
+                    msgbox = QMessageBox(QMessageBox.Information, 'Dialog', 'An unexpected error occurred, this action cannot be completed. The error details are: %s.' %e, QMessageBox.Ok)
+                    msgbox.exec()
 
 class Window(QMainWindow):
     def __init__(self, sql, parent = None):
@@ -955,6 +992,12 @@ class TBWindow(QMainWindow):
             sql_query(sql_dict[sql]['sql'], sql_dict[sql]['args'])
             self.originalData = sql_obj
             data = DataFrame(sql_obj, columns = headers)
+        elif isinstance(self.sql, list):
+            sql_query(sql_dict['DisplayRes']['sql'], None)
+            first5 = [list(x) for x in sql_obj]
+            first5.append(['...', '...', '...', '...', '...', '...', '...', '...'])
+            res = first5 + self.sql
+            data = DataFrame(res, columns = headers)
         else:
             self.sql = None
             data = sql
@@ -1015,18 +1058,18 @@ class TBWindow(QMainWindow):
                     self.view.horizontalHeader().setDefaultSectionSize(400)
         else:
             MenuBar = self.menuBar()
-            saveFile = QAction("&Save File", self)
-            saveFile.setShortcut("Ctrl+S")
-            saveFile.setStatusTip('Save File')
-            saveFile.triggered.connect(self.file_save)
-            MenuBar.addAction(saveFile)
+            if isinstance(self.sql, list):
+                MenuBar.addAction('Import Products').triggered.connect(self.importProducts)
+                row = 5
+            else:
+                MenuBar.addAction('Save File').triggered.connect(self.file_save)
+                row = None
             MenuBar.addAction('Close Window').triggered.connect(self.on_Cancel)
-            self.model = PandasModel(data)
+            self.model = PandasModel(data, row)
             self.proxy = QSortFilterProxyModel(self)
             self.proxy.setSourceModel(self.model)
             self.view.setModel(self.proxy)
-
-            if self.sql == 'DisplayActStock':
+            if self.sql == 'DisplayActStock' or isinstance(self.sql, list):
                 for column in range(self.view.horizontalHeader().count()):
                     self.view.resizeColumnToContents(column) 
                     if column != 2:
@@ -1051,7 +1094,12 @@ class TBWindow(QMainWindow):
             self.label.hide()
             self.lineEdit.hide()
 
-        if self.sql is None:
+        elif isinstance(self.sql, list):
+            self.comboBox.hide()
+            self.label.hide()
+            self.lineEdit.hide()
+
+        elif self.sql is None:
             lastRow = data.append(data.sum(numeric_only=True), ignore_index=True).tail(1).fillna(0).astype(int).replace(0,'').values
             flat_Row = ['Total: ' + str(item) if item != '' else '' for sublist in lastRow for item in sublist]
 
@@ -1060,6 +1108,19 @@ class TBWindow(QMainWindow):
             for item in flat_Row:
                 self.mWdg.layout().addWidget(QLabel(str(item)))
             self.statusBar().addPermanentWidget(self.mWdg, 1)
+
+    def importProducts(self):
+        check = [x[1] for x in self.sql]
+        sql_query(sql_dict['CheckStock']['sql'] %','.join('?'*len(check)), check)
+        if sql_obj == []:
+            for element in self.sql:
+                sql_query(sql_dict['RegUpProd']['sql'], (element))
+            msgbox = QMessageBox(QMessageBox.Information, 'Dialog', 'The import of product(s) completed successfully.', QMessageBox.Ok)
+            msgbox.exec()
+            self.close()
+        else:
+            msgbox = QMessageBox(QMessageBox.Information, 'Dialog', 'The item(s) you want to insert into Database should be already there: %s.' %sql_obj, QMessageBox.Ok)
+            msgbox.exec()
 
     def on_CancelModification(self):
         msgbox = QMessageBox(QMessageBox.Information, 'Dialog', 'Do you really want to proceed without saving the change(s)?', QMessageBox.Yes|QMessageBox.No)
@@ -1184,9 +1245,10 @@ class TBWindow(QMainWindow):
         self.proxy.setFilterKeyColumn(index)
 
 class PandasModel(QAbstractTableModel):
-    def __init__(self, data, parent=None):
+    def __init__(self, data, row, parent=None):
         QAbstractTableModel.__init__(self, parent)
         self._data = data
+        self.r = row
 
     def rowCount(self, parent=None):
         return self._data.shape[0]
@@ -1198,6 +1260,10 @@ class PandasModel(QAbstractTableModel):
         if index.isValid():
             if role == Qt.DisplayRole:
                 return str(self._data.iloc[index.row(), index.column()])
+            if role == Qt.BackgroundColorRole and self.r is not None:
+                bgColor=QColor(230,255,230)
+                if index.row() > self.r:   
+                    return QVariant(QColor(bgColor))
         return None
 
     def headerData(self, col, orientation, role):
