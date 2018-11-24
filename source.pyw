@@ -6,6 +6,7 @@ import shutil
 import sqlite3
 import smtplib
 import getpass
+import requests
 import calendar
 import unidecode
 import pythoncom
@@ -325,13 +326,12 @@ class appMW(QMainWindow):
         Tools.addAction('Update Rent Payers').triggered.connect(lambda arg, sql = 'DisplayModPayers': self.on_display(TBWindow(sql)))
         Tools.addAction('Backup the DB').triggered.connect(lambda arg, bType = 'Regular': self.on_BackUp(bType))
         Tools.addAction('Backup the DB Online').triggered.connect(lambda arg, bType = 'On-line': self.on_BackUp(bType))
-        
         Tools.addAction('Add New User').triggered.connect(lambda arg, sql = 'Add': self.on_display(UserForm(sql)))
         Tools.addAction('Remove Existing User').triggered.connect(lambda arg, sql = 'Remove': self.on_display(UserForm(sql)))
         Tools.addAction('Change User Password').triggered.connect(lambda arg, sql = 'Change': self.on_display(UserForm(sql)))
-
+        Tools.addAction('Update Application').triggered.connect(lambda arg , var = 'update': self.TCWarning(var))
 ##        NewOrder = mainMenu.addMenu('Orders')
-                
+
         sizeObject = QDesktopWidget().screenGeometry()
         w, h = sizeObject.width(), sizeObject.height()
         oImage = QImage(inputs + '\\logo.jpg')
@@ -339,6 +339,21 @@ class appMW(QMainWindow):
         palette = QPalette()
         palette.setBrush(10, QBrush(sImage))
         self.setPalette(palette)
+
+    def updateApp(self):
+        msgbox = QMessageBox(QMessageBox.Information, 'Dialog', 'Do you really want to update this application?' , QMessageBox.Yes|QMessageBox.No)
+        res = msgbox.exec()
+        if res == QMessageBox.Yes:
+            try:
+                shutil.copyfile(locked + 'source.pyw', backup + 'source' + datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + '.pyw')
+                req = requests.get('https://raw.githubusercontent.com/JiriCh/PP/master/source.pyw')
+                with open(locked + 'source.pyw', 'w+', encoding='utf-8') as r:
+                    r.write(req.text)
+                msgbox = QMessageBox(QMessageBox.Information, 'Dialog', 'The application has been updated successfully, please restart it to use its new functionality.', QMessageBox.Ok)
+                msgbox.exec()
+            except Exception as e:
+                msgbox = QMessageBox(QMessageBox.Information, 'Dialog', 'The application update failed, please see the details below: %s' %e, QMessageBox.Ok)
+                msgbox.exec()
 
     def TCWarning(self, var):
         if uNm in ('Admin', 'Jana') and var == 'SReport':
@@ -349,6 +364,8 @@ class appMW(QMainWindow):
                 self.view.show()
         elif uNm in ('Admin', 'Jana') and var == 'importProds':
             self.importProds()
+        elif uNm in ('Admin', 'Jana') and var == 'update':
+            self.updateApp()
         else:
             msgbox = QMessageBox(QMessageBox.Information, 'Dialog', 'This user does not have authorization for that action.', QMessageBox.Ok)
             msgbox.exec()
