@@ -1077,12 +1077,17 @@ class TBWindow(QMainWindow):
             MenuBar = self.menuBar()
             if isinstance(self.sql, list):
                 MenuBar.addAction('Import Products').triggered.connect(self.importProducts)
+                self.check = [x[1] for x in self.sql]
+                sql_query(sql_dict['CheckStock']['sql'] %','.join('?'*len(self.check)), self.check)
+                self.checkRes = sql_obj
+                dups = [index + 6 for index, row in enumerate(self.sql) if tuple(row) in self.checkRes]
                 row = 5
             else:
                 MenuBar.addAction('Save File').triggered.connect(self.file_save)
                 row = None
+                dups = None
             MenuBar.addAction('Close Window').triggered.connect(self.on_Cancel)
-            self.model = PandasModel(data, row)
+            self.model = PandasModel(data, row, dups)
             self.proxy = QSortFilterProxyModel(self)
             self.proxy.setSourceModel(self.model)
             self.view.setModel(self.proxy)
@@ -1127,16 +1132,14 @@ class TBWindow(QMainWindow):
             self.statusBar().addPermanentWidget(self.mWdg, 1)
 
     def importProducts(self):
-        check = [x[1] for x in self.sql]
-        sql_query(sql_dict['CheckStock']['sql'] %','.join('?'*len(check)), check)
-        if sql_obj == []:
+        if self.checkRes == []:
             for element in self.sql:
                 sql_query(sql_dict['RegUpProd']['sql'], (element))
             msgbox = QMessageBox(QMessageBox.Information, 'Dialog', 'The import of product(s) completed successfully.', QMessageBox.Ok)
             msgbox.exec()
             self.close()
         else:
-            msgbox = QMessageBox(QMessageBox.Information, 'Dialog', 'The item(s) you want to insert into Database should be already there: %s.' %sql_obj, QMessageBox.Ok)
+            msgbox = QMessageBox(QMessageBox.Information, 'Dialog', 'The item(s) you want to insert into Database should be already there: %s.' %self.checkRes, QMessageBox.Ok)
             msgbox.exec()
 
     def on_CancelModification(self):
@@ -1262,10 +1265,11 @@ class TBWindow(QMainWindow):
         self.proxy.setFilterKeyColumn(index)
 
 class PandasModel(QAbstractTableModel):
-    def __init__(self, data, row, parent=None):
+    def __init__(self, data, row, dups, parent=None):
         QAbstractTableModel.__init__(self, parent)
         self._data = data
         self.r = row
+        self.dup = dups
 
     def rowCount(self, parent=None):
         return self._data.shape[0]
@@ -1277,10 +1281,13 @@ class PandasModel(QAbstractTableModel):
         if index.isValid():
             if role == Qt.DisplayRole:
                 return str(self._data.iloc[index.row(), index.column()])
-            if role == Qt.BackgroundColorRole and self.r is not None:
+            if role == Qt.BackgroundColorRole and self.r is not None and self.dup is not None:
                 bgColor=QColor(230,255,230)
-                if index.row() > self.r:   
+                rColor=QColor(255,240,240)
+                if index.row() > self.r and index.row() not in self.dup: 
                     return QVariant(QColor(bgColor))
+                elif index.row() in self.dup:
+                    return QVariant(QColor(rColor))
         return None
 
     def headerData(self, col, orientation, role):
