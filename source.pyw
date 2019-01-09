@@ -160,6 +160,8 @@ sql_dict = {
     'InsertSellers' : {'sql' : 'INSERT into Sellers VALUES(?,?,?,?,?,?,?,?,?,?,?,?)', 'args' : None},
     'ValidateSeller' : {'sql' : 'SELECT distinct Seller from Sellers', 'args' : None},
     'DisplayModPayers' : {'sql' : 'SELECT * from Rent_payers', 'args' : None},
+    'DisplayModRents' : {'sql' : 'SELECT * from Rent_history where Outstanding = "Y"', 'args' : None},
+    'UpdateRents' : {'sql' : 'UPDATE Rent_history SET Rent_ID = ?, Rent_amount = ?, Seller = ?, Event_time = ?, Rent_value = ?, Payment_type = ?, Outstanding = ? where Seller = ? and Event_time = ?', 'args' : None},
     'ChangeModPayers' : {'sql' : 'INSERT into Rent_payers VALUES(?,?,?,?,?,?)', 'args' : None},
     'DeleteModPayers' : {'sql' : 'DELETE from Rent_payers where Seller is not ?', 'args' : None},
     'DistinctPayers' : {'sql' : 'SELECT distinct Seller from Rent_payers', 'args' : None},
@@ -324,6 +326,7 @@ class appMW(QMainWindow):
         Tools.addAction('Add New Seller').triggered.connect(lambda arg, glVar = None: self.on_display(Form(glVar)))
         Tools.addAction('Add New Rent Payer').triggered.connect(lambda arg, glVar = 'AddModPayer': self.on_display(Form(glVar)))
         Tools.addAction('Update Rent Payers').triggered.connect(lambda arg, sql = 'DisplayModPayers': self.on_display(TBWindow(sql)))
+        Tools.addAction('Update Rents').triggered.connect(lambda arg, sql = 'DisplayModRents': self.on_display(TBWindow(sql)))
         Tools.addAction('Backup the DB').triggered.connect(lambda arg, bType = 'Regular': self.on_BackUp(bType))
         Tools.addAction('Backup the DB Online').triggered.connect(lambda arg, bType = 'On-line': self.on_BackUp(bType))
         Tools.addAction('Add New User').triggered.connect(lambda arg, sql = 'Add': self.on_display(UserForm(sql)))
@@ -392,7 +395,7 @@ class appMW(QMainWindow):
                 msgbox = QMessageBox(QMessageBox.Information, 'Dialog', 'This user does not have authorization for that action.', QMessageBox.Ok)
                 msgbox.exec()
         else:
-            if arg.sql in ('ThisMonthCosts', 'ThisWeekCosts', 'LastCost', 'AllCosts', 'LastMonthCosts', 'SaveCosts', 'DisplayModStock', 'DisplayModPayers', 'DisplayZero') and uNm not in ('Admin', 'Jana'):
+            if arg.sql in ('ThisMonthCosts', 'ThisWeekCosts', 'LastCost', 'AllCosts', 'LastMonthCosts', 'SaveCosts', 'DisplayModStock', 'DisplayModPayers', 'DisplayModRents', 'DisplayZero') and uNm not in ('Admin', 'Jana'):
                 msgbox = QMessageBox(QMessageBox.Information, 'Dialog', 'This user does not have authorization for that action.', QMessageBox.Ok)
                 msgbox.exec()
             else:
@@ -1036,7 +1039,7 @@ class TBWindow(QMainWindow):
         self.gridLayout.addWidget(self.view, 1, 0, 1, 3)
         self.setCentralWidget(self.centralwidget)
 
-        if self.sql in ('DisplayModStock', 'DisplayZero', 'DisplayModPayers'):
+        if self.sql in ('DisplayModStock', 'DisplayZero', 'DisplayModPayers', 'DisplayModRents'):
             if len(data.index) == 0:#create empty table for new products
                 emptyList = []
                 for i in range(20):
@@ -1111,7 +1114,7 @@ class TBWindow(QMainWindow):
         self.lineEdit.textChanged.connect(self.on_lineEdit_textChanged)
         self.comboBox.currentIndexChanged.connect(self.on_comboBox_currentIndexChanged)
         
-        if self.sql in ('DisplayModPayers', 'DisplayZero'):
+        if self.sql in ('DisplayModPayers', 'DisplayModRents', 'DisplayZero'):
             self.comboBox.hide()
             self.label.hide()
             self.lineEdit.hide()
@@ -1172,6 +1175,31 @@ class TBWindow(QMainWindow):
                         row[5] = None
                     sql_query(sql_dict['ChangeModPayers']['sql'], row)
                 self.close()
+            elif self.sql == 'DisplayModRents':
+                check = [list(tup) for tup in sql_obj]
+                iCheck = [(tup[2], tup[3]) for tup in sql_obj]
+                res = []
+                for row in data:
+                    if row not in check:
+                        res.append(row)
+                InjectionCheck = [(x[2],x[3]) for x in res]
+                fcheck = []
+                for i in InjectionCheck:
+                    if i in iCheck:
+                        fcheck.append(i)
+                if len(fcheck) == len(InjectionCheck) and len(fcheck) != 0:
+                    if all(x[6] in ('Y', 'N') for x in res):
+                        for row in res:
+                            row.append(row[2])
+                            row.append(row[3])
+                            sql_query(sql_dict['UpdateRents']['sql'], row)
+                        self.close()
+                    else:
+                        msgbox = QMessageBox(QMessageBox.Information, 'Dialog', 'The Outstanding column can only contain either N or Y values.', QMessageBox.Ok)
+                        msgbox.exec()
+                else:
+                    msgbox = QMessageBox(QMessageBox.Information, 'Dialog', 'You cannot over-write Seller and/or Event_time columns.', QMessageBox.Ok)
+                    msgbox.exec()
             else:
                 for row in data:
                     if any([x for x in row if (x not in ' ' and x not in '')]):
