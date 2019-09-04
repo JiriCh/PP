@@ -521,7 +521,7 @@ class Window(QMainWindow):
             self.b = QCheckBox('Create Receipt    ',self)
             self.nameL = QCheckBox('Postage:')
             self.EditL = QLineEdit(self)
-            self.EET = QCheckBox('EET    ')
+            #self.EET = QCheckBox('EET    ')
             self.EditL.setFixedWidth(100)
             onlyInteger = QIntValidator()
             self.EditL.setValidator(onlyInteger)
@@ -530,7 +530,7 @@ class Window(QMainWindow):
             self.spacer = QWidget()
             self.spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
             toolBar = self.addToolBar('oneAct')
-            toolBar.addWidget(self.EET)
+            #toolBar.addWidget(self.EET)
             toolBar.addWidget(self.b)
             toolBar.addWidget(self.nameL)
             toolBar.addWidget(self.EditL)
@@ -581,79 +581,79 @@ class Window(QMainWindow):
                         msgbox.exec()
                     else:
                         #this needs to be implemented
-                        if self.EET.isChecked():
-                            print('self.EET.isChecked()', source)
-                            self.close()
-                        else:
-                            for element in source:
-                                sql_query(sql_dict['SavePurchase']['sql'], (element))
+                        # if self.EET.isChecked():
+                        #     print('self.EET.isChecked()', source)
+                        #     self.close()
+                        # else:
+                        for element in source:
+                            sql_query(sql_dict['SavePurchase']['sql'], (element))
 
-                            if self.b.isChecked():
+                        if self.b.isChecked():
 
-                                DocTemplate = inputs + '\\PurchaseTemplate.docx'
+                            DocTemplate = inputs + '\\PurchaseTemplate.docx'
 
-                                lines = []
-                                pSum = []
-                                reOrder = [1,0,2,3]
+                            lines = []
+                            pSum = []
+                            reOrder = [1,0,2,3]
 
-                                getID = []
-                                for row in source:
-                                    getID.append(row[2])
+                            getID = []
+                            for row in source:
+                                getID.append(row[2])
 
-                                addInfo = []
-                                for item in getID:
-                                    sql_query(sql_dict['addInfo']['sql'], [item])
-                                    addInfo.append(list(*sql_obj))
+                            addInfo = []
+                            for item in getID:
+                                sql_query(sql_dict['addInfo']['sql'], [item])
+                                addInfo.append(list(*sql_obj))
 
-                                temp = []
-                                for index, element in enumerate(source):
-                                    fin = addInfo[index] + source[index]
-                                    temp.append(fin)
-                                
-                                for i in temp:
-                                    eList = []
-                                    ppSum = []
-                                    for index, element in enumerate(i):
-                                        if index in (2,4,6,7):
-                                            if index in (6,7):
-                                                eList.append(format(int(element),'.2f'))
-                                            else:
-                                                eList.append(element)
-                                        if index == 7:
-                                            ppSum.append(int(element))
-                                    fList = [eList[j] for j in reOrder]
-                                    lines.append(fList)
-                                    pSum.append(ppSum)
+                            temp = []
+                            for index, element in enumerate(source):
+                                fin = addInfo[index] + source[index]
+                                temp.append(fin)
+                            
+                            for i in temp:
+                                eList = []
+                                ppSum = []
+                                for index, element in enumerate(i):
+                                    if index in (2,4,6,7):
+                                        if index in (6,7):
+                                            eList.append(format(int(element),'.2f'))
+                                        else:
+                                            eList.append(element)
+                                    if index == 7:
+                                        ppSum.append(int(element))
+                                fList = [eList[j] for j in reOrder]
+                                lines.append(fList)
+                                pSum.append(ppSum)
 
-                                Total = int(str([sum(i) for i in zip(*pSum)]).strip('[]'))
-                                DPHperc = 0.21
-                                DPH = DPHperc * Total
-                                woDPH = Total - DPH
-                                            
-                                keys = ['NPieces', 'ProdDesc', 'UnitPrice', 'TotalPrice']
-                                dictList = []
+                            Total = int(str([sum(i) for i in zip(*pSum)]).strip('[]'))
+                            DPHperc = 0.21
+                            DPH = DPHperc * Total
+                            woDPH = Total - DPH
+                                        
+                            keys = ['NPieces', 'ProdDesc', 'UnitPrice', 'TotalPrice']
+                            dictList = []
 
-                                for i in lines:
-                                    dictList.append(dict(zip(keys, i)))
+                            for i in lines:
+                                dictList.append(dict(zip(keys, i)))
 
-                                paymentDD = {'Cash' : 'Hotově' , 'Noncash Payment' : 'Bezhotovostně', 'Cash on Delivery' : 'Na dobírku', 'Bank Transfer' : 'Bankovním převodem'}
+                            paymentDD = {'Cash' : 'Hotově' , 'Noncash Payment' : 'Bezhotovostně', 'Cash on Delivery' : 'Na dobírku', 'Bank Transfer' : 'Bankovním převodem'}
 
-                                document = MailMerge(DocTemplate)
-                                document.merge(
-                                    BusinessName = 'Princezna Pampeliška - Jana Klapetková',
-                                    PurchaseID = 'PN' + str(round(datetime.today().timestamp())),
-                                    CashID = '1',
-                                    Cashier = uNm,
-                                    paymentMethod = paymentDD.get(self.group.checkedAction().text()),
-                                    iDPH = str(format(DPH,'.2f')),
-                                    iwoDPH = str(format(woDPH,'.2f')),
-                                    iDPHperc = str(format(round(DPHperc * 100),'.2f')),
-                                    iTotal = str(format(Total,'.2f')),
-                                    TimeStamp = '{:%d-%b-%Y}'.format(date.today()))
-                                document.merge_rows('NPieces', dictList)
-                                document.write(desktop + 'PN' + str(round(datetime.today().timestamp())) + '.docx')
+                            document = MailMerge(DocTemplate)
+                            document.merge(
+                                BusinessName = 'Princezna Pampeliška - Jana Klapetková',
+                                PurchaseID = 'PN' + str(round(datetime.today().timestamp())),
+                                CashID = '1',
+                                Cashier = uNm,
+                                paymentMethod = paymentDD.get(self.group.checkedAction().text()),
+                                iDPH = str(format(DPH,'.2f')),
+                                iwoDPH = str(format(woDPH,'.2f')),
+                                iDPHperc = str(format(round(DPHperc * 100),'.2f')),
+                                iTotal = str(format(Total,'.2f')),
+                                TimeStamp = '{:%d-%b-%Y}'.format(date.today()))
+                            document.merge_rows('NPieces', dictList)
+                            document.write(desktop + 'PN' + str(round(datetime.today().timestamp())) + '.docx')
 
-                            self.close()               
+                        self.close()               
 
             else:
                 msgbox = QMessageBox(QMessageBox.Information, 'Dialog', 'Nothing has been selected within the purchase template.', QMessageBox.Ok)
